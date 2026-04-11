@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body { font-family: sans-serif; font-size: 11px; color: #333; margin: 0; padding: 20px; }
+    h1 { font-size: 18px; color: #4f46e5; margin-bottom: 4px; }
+    .subtitle { color: #888; font-size: 10px; margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #f8f9ff; text-align: center; padding: 6px 8px; font-size: 10px;
+         color: #6b7280; border-bottom: 2px solid #e5e7eb; }
+    th:nth-child(1) { width: 12%; }
+    th:nth-child(2) { width: 15%; }
+    th:nth-child(3) { width: 25%; }
+    th:nth-child(4) { width: 12%; }
+    th:nth-child(5) { width: 8%; }
+    th:nth-child(6) { width: 28%; }
+    td { padding: 5px 8px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+    .day-row td { background: #eef2ff; font-weight: bold; font-size: 12px;
+                  padding: 8px 10px; border-bottom: 1px solid #e5e7eb; }
+    .empty-row td { color: #bbb; font-style: italic; }
+  </style>
+</head>
+<body>
+  <h1>{{ title }}</h1>
+  <p class="subtitle">Exported {{ export_date }}</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Spot</th>
+        <th>Activity</th>
+        <th>Transport</th>
+        <th>Cost</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for day in days %}
+      <tr class="day-row">
+        <td colspan="6">Day {{ loop.index }} — {{ day.date }}</td>
+      </tr>
+      {% if day['items'] %}
+      {% for item in day['items'] %}
+      <tr>
+        <td>{{ item.time_start or '' }}{% if item.time_end %} – {{ item.time_end }}{% endif %}</td>
+        <td>{{ item.spot_name or '' }}</td>
+        <td>{{ item.activity_desc or '' }}</td>
+        <td>{{ item.transport or '' }}</td>
+        <td>{% if item.estimated_cost %}${{ '%.2f' | format(item.estimated_cost | float) }}{% endif %}</td>
+        <td>{{ item.notes or '' }}</td>
+      </tr>
+      {% endfor %}
+      {% else %}
+      <tr class="empty-row">
+        <td colspan="6">No activities for this day.</td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>
