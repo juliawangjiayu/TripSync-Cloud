@@ -12,7 +12,7 @@ from sqlalchemy import select
 def _configure_gemini():
     import google.generativeai as genai
     genai.configure(api_key=settings.GEMINI_API_KEY)
-    return genai.GenerativeModel("gemini-2.0-flash")
+    return genai.GenerativeModel("gemini-2.5-flash")
 
 
 async def build_itinerary_context(itinerary_id: str, title: str, db: AsyncSession) -> str:

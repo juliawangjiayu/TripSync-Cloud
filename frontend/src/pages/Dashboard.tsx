@@ -97,7 +97,7 @@ export default function Dashboard() {
 
   const moveItinerary = async (id: string, folderId: string | null) => {
     try {
-      const { data } = await itinerariesApi.update(id, { folder_id: folderId })
+      const { data } = await itinerariesApi.update(id, { folder_id: folderId ?? undefined })
       setItineraries((prev) => prev.map((i) => (i.id === id ? data : i)))
     } catch {
       addToast('Failed to move itinerary', 'error')
