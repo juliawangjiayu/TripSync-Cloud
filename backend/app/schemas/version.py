@@ -10,6 +10,13 @@ class DiffEntry(BaseModel):
     new_value: Optional[Any]
 
 
+class ChangeSummary(BaseModel):
+    edits: int = 0
+    creates: int = 0
+    deletes: int = 0
+    reorders: int = 0
+
+
 class VersionListItem(BaseModel):
     """Summary row shown in the history drawer."""
     id: str
@@ -17,7 +24,8 @@ class VersionListItem(BaseModel):
     entry_type: str         # 'edit' | 'rollback'
     author_id: Optional[str]
     created_at: datetime
-    change_count: int       # number of fields changed (len of diff), 0 for snapshot-only entries
+    change_count: int       # total number of diff entries
+    change_summary: ChangeSummary
 
     model_config = {"from_attributes": True}
 

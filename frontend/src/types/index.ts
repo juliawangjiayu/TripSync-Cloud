@@ -111,6 +111,13 @@ export interface Member {
   invited_via: string | null
 }
 
+export interface ChangeSummary {
+  edits: number
+  creates: number
+  deletes: number
+  reorders: number
+}
+
 export interface VersionListItem {
   id: string
   version_num: number
@@ -118,6 +125,7 @@ export interface VersionListItem {
   author_id: string | null
   created_at: string
   change_count: number
+  change_summary: ChangeSummary
 }
 
 export interface MapPin {
