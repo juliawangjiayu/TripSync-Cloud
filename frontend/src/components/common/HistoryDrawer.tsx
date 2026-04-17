@@ -2,7 +2,16 @@ import { useState, useEffect, useCallback } from 'react'
 import { useUIStore } from '../../stores/uiStore'
 import { useItineraryStore } from '../../stores/itineraryStore'
 import { versionsApi } from '../../api/client'
-import type { VersionListItem } from '../../types'
+import type { VersionListItem, ChangeSummary } from '../../types'
+
+function formatSummary(s: ChangeSummary): string {
+  const parts: string[] = []
+  if (s.edits > 0) parts.push(`${s.edits} field${s.edits !== 1 ? 's' : ''} edited`)
+  if (s.creates > 0) parts.push(`${s.creates} item${s.creates !== 1 ? 's' : ''} created`)
+  if (s.deletes > 0) parts.push(`${s.deletes} item${s.deletes !== 1 ? 's' : ''} deleted`)
+  if (s.reorders > 0) parts.push(`${s.reorders} item${s.reorders !== 1 ? 's' : ''} reordered`)
+  return parts.length > 0 ? parts.join(', ') : 'snapshot'
+}
 
 interface HistoryDrawerProps {
   itineraryId: string
@@ -130,7 +139,7 @@ export default function HistoryDrawer({ itineraryId }: HistoryDrawerProps) {
                 <div className="text-xs text-gray-500">
                   <span>{formatDate(v.created_at)}</span>
                   <span className="mx-1.5">&middot;</span>
-                  <span>{v.change_count} change{v.change_count !== 1 ? 's' : ''}</span>
+                  <span>{formatSummary(v.change_summary)}</span>
                 </div>
               </div>
             ))}

@@ -80,12 +80,6 @@ async def patch_item(
 
     await db.flush()
 
-    if payload.save_version and accepted:
-        from app.services.version import append_version
-        day = await db.scalar(select(ItineraryDay).where(ItineraryDay.id == item.day_id))
-        if day:
-            await append_version(day.itinerary_id, accepted, item_id, author_id, db)
-
     await db.commit()
 
     refreshed_alts = []
@@ -149,7 +143,7 @@ async def adopt_alternative(
     )
     result = await patch_item(
         item_id=alt.item_id,
-        payload=PatchItemRequest(changes=[change], save_version=True),
+        payload=PatchItemRequest(changes=[change]),
         author_id=author_id,
         db=db,
     )

@@ -58,8 +58,7 @@ async def build_full_snapshot(itinerary_id: str, db: AsyncSession) -> dict:
 
 async def append_version(
     itinerary_id: str,
-    changes: list,      # list of FieldChange objects (field, value, old_value optional)
-    item_id: str,
+    diff: list[dict],
     author_id: str,
     db: AsyncSession,
     entry_type: str = "edit",
@@ -68,10 +67,9 @@ async def append_version(
     """
     Appends a new version entry to version_history.
     Returns the new version number.
-    Uses a full snapshot at version 1 and every SNAPSHOT_INTERVAL-th version;
-    otherwise stores a diff list.
+    Stores a full snapshot at version 1 and every SNAPSHOT_INTERVAL-th version;
+    otherwise stores the provided diff list.
     """
-    # Use PostgreSQL advisory lock keyed on itinerary_id hash to prevent concurrent version inserts
     lock_key = hash(itinerary_id) % (2**31)
     await db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_key})
 
@@ -84,35 +82,19 @@ async def append_version(
     last_num = latest_row.version_num if latest_row else 0
     next_num = last_num + 1
 
+    snapshot = None
     if next_num == 1 or next_num % SNAPSHOT_INTERVAL == 0 or forced_snapshot is not None:
         snapshot = forced_snapshot if forced_snapshot is not None else await build_full_snapshot(itinerary_id, db)
-        entry = VersionHistory(
-            id=str(uuid.uuid4()),
-            itinerary_id=itinerary_id,
-            version_num=next_num,
-            snapshot=snapshot,
-            diff=None,
-            entry_type=entry_type,
-            author_id=author_id,
-        )
-    else:
-        diff = []
-        for change in changes:
-            diff.append({
-                "item_id": item_id,
-                "field": change.field,
-                "old_value": None,
-                "new_value": str(change.value) if change.value is not None else None,
-            })
-        entry = VersionHistory(
-            id=str(uuid.uuid4()),
-            itinerary_id=itinerary_id,
-            version_num=next_num,
-            snapshot=None,
-            diff=diff,
-            entry_type=entry_type,
-            author_id=author_id,
-        )
+
+    entry = VersionHistory(
+        id=str(uuid.uuid4()),
+        itinerary_id=itinerary_id,
+        version_num=next_num,
+        snapshot=snapshot,
+        diff=diff if diff else None,
+        entry_type=entry_type,
+        author_id=author_id,
+    )
 
     db.add(entry)
     await db.flush()
@@ -184,8 +166,7 @@ async def rollback_to_version(
     current_snapshot = await build_full_snapshot(itinerary_id, db)
     new_version_num = await append_version(
         itinerary_id=itinerary_id,
-        changes=[],
-        item_id="",
+        diff=[],
         author_id=requester_id,
         db=db,
         entry_type="rollback",

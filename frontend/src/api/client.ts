@@ -89,8 +89,7 @@ export const itinerariesApi = {
     itinId: string,
     itemId: string,
     changes: { field: string; value: unknown; based_on_updated_at: string }[],
-    save_version = true
-  ) => api.patch<PatchItemResponse>(`/itineraries/${itinId}/items/${itemId}`, { changes, save_version }),
+  ) => api.patch<PatchItemResponse>(`/itineraries/${itinId}/items/${itemId}`, { changes }),
   deleteItem: (itinId: string, itemId: string) =>
     api.delete(`/itineraries/${itinId}/items/${itemId}`),
   reorderItem: (itinId: string, itemId: string, day_id: string, new_order: number) =>
@@ -142,6 +141,8 @@ export const mapPinsApi = {
 export const versionsApi = {
   list: (itinId: string, page = 1, per_page = 20) =>
     api.get<VersionListItem[]>(`/itineraries/${itinId}/versions`, { params: { page, per_page } }),
+  create: (itinId: string, changes: Record<string, unknown>[]) =>
+    api.post<{ version_num: number }>(`/itineraries/${itinId}/versions`, { changes }),
   rollback: (itinId: string, versionNum: number) =>
     api.post<{ new_version_num: number; message: string }>(`/itineraries/${itinId}/versions/${versionNum}/rollback`),
 }

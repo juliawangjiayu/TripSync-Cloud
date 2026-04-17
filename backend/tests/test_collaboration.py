@@ -40,7 +40,6 @@ async def test_patch_accepted_no_conflict(client: AsyncClient):
                     "based_on_updated_at": item["spot_updated_at"],
                 }
             ],
-            "save_version": False,
         },
         headers=h,
     )
@@ -69,7 +68,6 @@ async def test_patch_conflict_creates_alternative(client: AsyncClient):
                     "based_on_updated_at": stale_ts,
                 }
             ],
-            "save_version": False,
         },
         headers=h,
     )
@@ -97,7 +95,6 @@ async def test_patch_mixed_accepted_and_conflicted(client: AsyncClient):
                 {"field": "notes", "value": "Fresh note", "based_on_updated_at": actual_notes_ts.isoformat()},
                 {"field": "spot_name", "value": "Stale spot", "based_on_updated_at": stale_spot_ts},
             ],
-            "save_version": False,
         },
         headers=h,
     )
@@ -117,7 +114,6 @@ async def test_patch_invalid_field_returns_422(client: AsyncClient):
         f"/v1/itineraries/{itin_id}/items/{item_id}",
         json={
             "changes": [{"field": "id", "value": "hack", "based_on_updated_at": item["spot_updated_at"]}],
-            "save_version": False,
         },
         headers=h,
     )
@@ -134,7 +130,6 @@ async def test_viewer_cannot_patch(client: AsyncClient):
         f"/v1/itineraries/{itin_id}/items/{item_id}",
         json={
             "changes": [{"field": "notes", "value": "x", "based_on_updated_at": item["notes_updated_at"]}],
-            "save_version": False,
         },
         headers=viewer_h,
     )
