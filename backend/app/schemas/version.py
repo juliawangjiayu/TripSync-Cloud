@@ -39,3 +39,10 @@ class VersionDetail(BaseModel):
 class RollbackResponse(BaseModel):
     new_version_num: int
     message: str
+
+
+class CreateVersionRequest(BaseModel):
+    changes: list[dict]
+
+class CreateVersionResponse(BaseModel):
+    version_num: int
