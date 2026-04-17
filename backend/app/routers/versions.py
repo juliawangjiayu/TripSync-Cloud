@@ -7,8 +7,8 @@ from app.core.database import get_db
 from app.deps import require_editor, require_member
 from app.models.version import VersionHistory
 from app.models.itinerary import Itinerary
-from app.schemas.version import VersionListItem, VersionDetail, DiffEntry, RollbackResponse
-from app.services.version import rollback_to_version
+from app.schemas.version import VersionListItem, VersionDetail, DiffEntry, RollbackResponse, CreateVersionRequest, CreateVersionResponse
+from app.services.version import rollback_to_version, append_version
 from app.deps import get_current_user
 from app.models.user import User
 
@@ -45,6 +45,26 @@ async def list_versions(
             change_count=change_count,
         ))
     return items
+
+
+@router.post("/{itinerary_id}/versions", response_model=CreateVersionResponse, status_code=201)
+async def create_version(
+    itinerary_id: str,
+    payload: CreateVersionRequest,
+    itin: Itinerary = Depends(require_editor),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not payload.changes:
+        raise HTTPException(status_code=400, detail="No changes to record")
+    version_num = await append_version(
+        itinerary_id=itinerary_id,
+        diff=payload.changes,
+        author_id=current_user.id,
+        db=db,
+    )
+    await db.commit()
+    return CreateVersionResponse(version_num=version_num)
 
 
 @router.get("/{itinerary_id}/versions/{version_num}", response_model=VersionDetail)
