@@ -16,6 +16,7 @@ export default function Dashboard() {
   const [editingFolderName, setEditingFolderName] = useState('')
   const [editingItinId, setEditingItinId] = useState<string | null>(null)
   const [editingItinTitle, setEditingItinTitle] = useState('')
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
   const { user, logout } = useAuthStore()
   const { addToast } = useUIStore()
   const navigate = useNavigate()
@@ -129,14 +130,35 @@ export default function Dashboard() {
       {/* Top nav */}
       <header className="bg-white border-b px-6 py-3 flex items-center justify-between">
         <span className="font-bold text-indigo-700 text-lg">TripSync</span>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-600">{user?.username}</span>
-          <button onClick={handleLogout} className="text-sm text-gray-500 hover:text-gray-700">
-            Sign out
+        <div className="relative">
+          <button
+            onClick={() => setUserMenuOpen(!userMenuOpen)}
+            className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-800"
+          >
+            {user?.username}
+            <svg className={`w-3.5 h-3.5 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
           </button>
-          <button onClick={handleDeleteAccount} className="text-sm text-red-500 hover:text-red-700">
-            Delete Account
-          </button>
+          {userMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setUserMenuOpen(false)} />
+              <div className="absolute right-0 mt-1 w-44 bg-white border rounded-lg shadow-lg z-20 py-1">
+                <button
+                  onClick={() => { setUserMenuOpen(false); handleLogout() }}
+                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                >
+                  Sign out
+                </button>
+                <button
+                  onClick={() => { setUserMenuOpen(false); handleDeleteAccount() }}
+                  className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                >
+                  Delete Account
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </header>
 
