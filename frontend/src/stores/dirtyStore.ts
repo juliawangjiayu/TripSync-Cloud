@@ -1,7 +1,8 @@
 import { create } from 'zustand'
-import { itinerariesApi } from '../api/client'
+import { itinerariesApi, versionsApi } from '../api/client'
 import { useItineraryStore } from './itineraryStore'
 import { useAlternativeStore } from './alternativeStore'
+import { useUIStore } from './uiStore'
 import type { PatchItemResponse, DayWithItems } from '../types'
 
 interface DirtyEntry {
@@ -305,6 +306,10 @@ export const useDirtyStore = create<DirtyStore>((set, get) => ({
   saveAll: async (itineraryId) => {
     const { dirty, save, pendingDeleteItems, pendingDeleteDays, pendingDayUpdates, clearItem } = get()
 
+    // Snapshot state before save for version diff
+    const snapshotDirty = JSON.parse(JSON.stringify(dirty))
+    const snapshotDays = cloneDays()
+
     // 0. Create temp items on server first (with their dirty field values)
     const itinStore = useItineraryStore.getState()
     const tempItemIds = Object.keys(dirty).filter((id) => id.startsWith('temp-'))
@@ -401,6 +406,58 @@ export const useDirtyStore = create<DirtyStore>((set, get) => ({
     )
     const failedDayDeletes = dayDeleteResults.filter((r) => r.status === 'rejected')
 
+    // -- Collect version diff entries --
+    const versionChanges: Record<string, unknown>[] = []
+
+    // Edits: from dirty fields on existing items
+    for (const itemId of realItemIds) {
+      const itemDirty = snapshotDirty[itemId]
+      if (!itemDirty) continue
+      for (const [field, entry] of Object.entries(itemDirty)) {
+        const oldItem = snapshotDays
+          .flatMap((d) => d.items)
+          .find((i) => i.id === itemId)
+        versionChanges.push({
+          action: 'edit',
+          item_id: itemId,
+          field,
+          old_value: oldItem ? String(oldItem[field as keyof typeof oldItem] ?? '') : null,
+          new_value: String((entry as { value: unknown }).value ?? ''),
+        })
+      }
+    }
+
+    // Creates: from temp items
+    for (const tempId of tempItemIds) {
+      const itemDirty = snapshotDirty[tempId]
+      if (!itemDirty || Object.keys(itemDirty).length === 0) continue
+      const fields: Record<string, unknown> = {}
+      for (const [field, entry] of Object.entries(itemDirty)) {
+        fields[field] = (entry as { value: unknown }).value
+      }
+      versionChanges.push({ action: 'create', item_id: tempId, ...fields })
+    }
+
+    // Deletes
+    for (const { itemId } of pendingDeleteItems) {
+      versionChanges.push({ action: 'delete', item_id: itemId })
+    }
+
+    // Reorders
+    for (const { itemId, dayId, newOrder } of pendingReorders) {
+      const oldItem = snapshotDays
+        .flatMap((d) => d.items)
+        .find((i) => i.id === itemId)
+      versionChanges.push({
+        action: 'reorder',
+        item_id: itemId,
+        old_day_id: oldItem?.day_id ?? null,
+        new_day_id: dayId,
+        old_order: oldItem?.item_order ?? null,
+        new_order: newOrder,
+      })
+    }
+
     // Clear all pending operations and undo stack
     set({ pendingDeleteItems: [], pendingDeleteDays: [], pendingDayUpdates: [], pendingReorders: [], undoStack: [] })
 
@@ -408,6 +465,17 @@ export const useDirtyStore = create<DirtyStore>((set, get) => ({
     if (totalFailed > 0) {
       throw new Error(`${totalFailed} operation(s) failed to save`)
     }
+
+    // Create version entry (non-blocking — failure shows toast but doesn't fail save)
+    if (versionChanges.length > 0) {
+      try {
+        await versionsApi.create(itineraryId, versionChanges)
+      } catch {
+        const { addToast } = useUIStore.getState()
+        addToast('Version history recording failed', 'error')
+      }
+    }
+
     return { conflictCount, deletedCount }
   },
 }))
