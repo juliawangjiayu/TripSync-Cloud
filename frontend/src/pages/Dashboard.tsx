@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 import { useUIStore } from '../stores/uiStore'
-import { foldersApi, itinerariesApi } from '../api/client'
+import { authApi, foldersApi, itinerariesApi } from '../api/client'
 import type { Folder, Itinerary } from '../types'
 import { format } from 'date-fns'
 
@@ -109,6 +109,17 @@ export default function Dashboard() {
     navigate('/login')
   }
 
+  const handleDeleteAccount = async () => {
+    if (!window.confirm('Are you sure you want to delete your account? This action cannot be undone. All your itineraries, folders, and data will be permanently deleted.')) return
+    try {
+      await authApi.deleteAccount()
+      logout()
+      navigate('/login')
+    } catch {
+      addToast('Failed to delete account', 'error')
+    }
+  }
+
   const filteredItineraries = selectedFolder
     ? itineraries.filter((i) => i.folder_id === selectedFolder)
     : itineraries
@@ -122,6 +133,9 @@ export default function Dashboard() {
           <span className="text-sm text-gray-600">{user?.username}</span>
           <button onClick={handleLogout} className="text-sm text-gray-500 hover:text-gray-700">
             Sign out
+          </button>
+          <button onClick={handleDeleteAccount} className="text-sm text-red-500 hover:text-red-700">
+            Delete Account
           </button>
         </div>
       </header>

@@ -59,6 +59,7 @@ export const authApi = {
   login: (email: string, password: string) =>
     api.post<{ user: User; access_token: string; refresh_token: string }>('/auth/login', { email, password }),
   logout: () => api.post('/auth/logout'),
+  deleteAccount: () => api.delete('/auth/me'),
   completeOnboarding: () => api.patch('/auth/me/onboarding-complete'),
 }
 
