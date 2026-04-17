@@ -9,7 +9,6 @@ class FieldChange(BaseModel):
 
 class PatchItemRequest(BaseModel):
     changes: list[FieldChange]
-    save_version: bool = True
 
 class AlternativeOut(BaseModel):
     id: str
