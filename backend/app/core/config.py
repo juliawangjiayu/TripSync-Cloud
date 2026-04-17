@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     AWS_REGION: str = "ap-southeast-1"
     S3_EXPORT_BUCKET: str = ""
-    GEMINI_API_KEY: str = ""
+    DEEPSEEK_API_KEY: str = ""
     FRONTEND_ORIGIN: str = "http://localhost:3000"
 
     class Config:

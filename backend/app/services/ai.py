@@ -1,18 +1,24 @@
 """
-Gemini AI chat service.
+DeepSeek AI chat service (OpenAI-compatible API).
 Builds an itinerary context string and streams the response as SSE tokens.
 """
 from typing import AsyncGenerator
+from openai import AsyncOpenAI
 from app.core.config import settings
 from app.models.itinerary import ItineraryDay, ItineraryItem
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+_client: AsyncOpenAI | None = None
 
-def _configure_gemini():
-    import google.generativeai as genai
-    genai.configure(api_key=settings.GEMINI_API_KEY)
-    return genai.GenerativeModel("gemini-2.5-flash")
+def _get_client() -> AsyncOpenAI:
+    global _client
+    if _client is None:
+        _client = AsyncOpenAI(
+            api_key=settings.DEEPSEEK_API_KEY,
+            base_url="https://api.deepseek.com",
+        )
+    return _client
 
 
 async def build_itinerary_context(itinerary_id: str, title: str, db: AsyncSession) -> str:
@@ -56,20 +62,22 @@ async def stream_chat_response(
         f"{context}"
     )
 
-    model = _configure_gemini()
-    chat_history = [
-        {"role": turn["role"], "parts": [turn["content"]]}
-        for turn in history
-    ]
+    messages = [{"role": "system", "content": system_prompt}]
+    for turn in history:
+        messages.append({"role": turn["role"], "content": turn["content"]})
+    messages.append({"role": "user", "content": message})
 
-    chat = model.start_chat(history=chat_history)
-    full_message = f"{system_prompt}\n\nUser: {message}"
-
+    client = _get_client()
     try:
-        response = chat.send_message(full_message, stream=True)
-        for chunk in response:
-            if chunk.text:
-                text = chunk.text.replace("\n", "\\n")
+        stream = await client.chat.completions.create(
+            model="deepseek-chat",
+            messages=messages,
+            stream=True,
+        )
+        async for chunk in stream:
+            delta = chunk.choices[0].delta
+            if delta.content:
+                text = delta.content.replace("\n", "\\n")
                 yield f"data: {text}\n\n"
     except Exception as e:
         error_msg = str(e).replace("\n", " ")

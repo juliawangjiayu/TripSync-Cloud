@@ -1,0 +1,119 @@
+name: Deploy TripSync
+
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION: ap-southeast-1
+  ECR_REPOSITORY: tripsync-backend
+  S3_BUCKET: tripsync-frontend-${{ secrets.AWS_ACCOUNT_ID }}
+
+jobs:
+  # ─── Backend: Build, push to ECR, deploy to EC2 ───
+  deploy-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        working-directory: backend
+        run: |
+          IMAGE_URI=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          IMAGE_LATEST=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          docker build --platform linux/amd64 -t $IMAGE_URI -t $IMAGE_LATEST .
+          docker push $IMAGE_URI
+          docker push $IMAGE_LATEST
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Login to ECR
+            aws ecr get-login-password --region ap-southeast-1 | \
+              docker login --username AWS --password-stdin \
+              ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-southeast-1.amazonaws.com
+
+            # Pull latest image
+            docker pull ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-southeast-1.amazonaws.com/${{ env.ECR_REPOSITORY }}:latest
+
+            # Stop old container
+            docker stop tripsync || true
+            docker rm tripsync || true
+
+            # Run new container
+            docker run -d --name tripsync \
+              --restart unless-stopped \
+              -p 8000:8000 \
+              -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+              -e SECRET_KEY="${{ secrets.SECRET_KEY }}" \
+              -e DEEPSEEK_API_KEY="${{ secrets.DEEPSEEK_API_KEY }}" \
+              -e FRONTEND_ORIGIN="${{ secrets.FRONTEND_ORIGIN }}" \
+              ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-southeast-1.amazonaws.com/${{ env.ECR_REPOSITORY }}:latest
+
+            # Run migrations
+            docker exec tripsync alembic upgrade head
+
+            # Clean up old images
+            docker image prune -f
+
+  # ─── Frontend: Build and deploy to S3 + CloudFront ───
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install and build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+        env:
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+          VITE_GOOGLE_MAPS_KEY: ${{ secrets.VITE_GOOGLE_MAPS_KEY }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy to S3
+        working-directory: frontend
+        run: |
+          # Upload hashed assets with long cache
+          aws s3 sync dist/ s3://${{ env.S3_BUCKET }}/ \
+            --delete \
+            --cache-control "public, max-age=31536000" \
+            --exclude "index.html"
+
+          # Upload index.html with no-cache
+          aws s3 cp dist/index.html s3://${{ env.S3_BUCKET }}/index.html \
+            --cache-control "no-cache, no-store, must-revalidate"
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/index.html"

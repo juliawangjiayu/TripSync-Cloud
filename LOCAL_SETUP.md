@@ -123,8 +123,8 @@ REFRESH_TOKEN_EXPIRE_DAYS=7
 # ============================================================
 # 可选：第三方服务（不配也能跑，对应功能会不可用）
 # ============================================================
-# Google Gemini AI 聊天 — 从 https://aistudio.google.com/apikey 获取
-GEMINI_API_KEY=
+# DeepSeek AI 聊天 — 从 https://platform.deepseek.com/api_keys 获取
+DEEPSEEK_API_KEY=
 
 # CORS 允许的前端地址，本地开发保持默认即可
 FRONTEND_ORIGIN=http://localhost:3000
@@ -226,7 +226,7 @@ npm run dev
 
 | 功能 | 需要的环境变量 | 获取方式 |
 |------|--------------|---------|
-| AI 聊天 | 后端 `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com/apikey) |
+| AI 聊天 | 后端 `DEEPSEEK_API_KEY` | [DeepSeek Platform](https://platform.deepseek.com/api_keys) |
 | 地图 | 前端 `VITE_GOOGLE_MAPS_KEY`（见下方） | [Google Cloud Console](https://console.cloud.google.com/) |
 | PDF 邮件发送 | 后端 `AWS_REGION`, `S3_EXPORT_BUCKET` + AWS 凭证 | AWS 账号 |
 
