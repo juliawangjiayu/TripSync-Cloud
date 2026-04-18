@@ -11,7 +11,7 @@ router = APIRouter(prefix="/itineraries", tags=["ai"])
 
 
 class ChatMessage(BaseModel):
-    role: str   # 'user' | 'model'
+    role: str   # 'user' | 'assistant'
     content: str
 
 

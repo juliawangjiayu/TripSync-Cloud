@@ -42,7 +42,7 @@ export default function AIChatPanel({ itineraryId }: AIChatPanelProps) {
         body: JSON.stringify({
           message: text,
           history: messages.map((m) => ({
-            role: m.role === 'assistant' ? 'model' : 'user',
+            role: m.role,
             content: m.content,
           })),
         }),
