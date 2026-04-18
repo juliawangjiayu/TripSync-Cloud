@@ -11,7 +11,15 @@ interface AIChatPanelProps {
 }
 
 export default function AIChatPanel({ itineraryId }: AIChatPanelProps) {
-  const [messages, setMessages] = useState<Message[]>([])
+  const storageKey = `ai-chat-${itineraryId}`
+  const [messages, setMessages] = useState<Message[]>(() => {
+    try {
+      const saved = localStorage.getItem(storageKey)
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
   const [input, setInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -19,6 +27,12 @@ export default function AIChatPanel({ itineraryId }: AIChatPanelProps) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      localStorage.setItem(storageKey, JSON.stringify(messages))
+    }
+  }, [messages, storageKey])
 
   const sendMessage = async () => {
     const text = input.trim()
