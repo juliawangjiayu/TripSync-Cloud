@@ -156,7 +156,3 @@ TripSync-Cloud/
 ├── .github/workflows/     # CI/CD pipeline
 └── docs/                  # Deployment guide
 ```
-
-## Team
-
-NUS CS5224 Cloud Computing
