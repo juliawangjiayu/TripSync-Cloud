@@ -271,11 +271,6 @@ cells; the user may **adopt** the alternative (which re-saves with the now-
 current timestamp and is guaranteed to succeed) or **dismiss** it. No
 collaborative input is ever silently lost.
 
-![Field-level conflict resolution sequence](docs/images/conflict-resolution-sequence.png)
-
-*Figure 3 — Sequence diagram of a concurrent save. User A wins on timestamp;
-User B's value is preserved as a starred alternative, which B can adopt to
-re-save cleanly.*
 
 #### 3.2 Hybrid Snapshot + Diff Version Control (`backend/app/services/version.py`)
 
