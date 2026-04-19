@@ -159,45 +159,6 @@ TripSync-Cloud/
 
 ## Code Explanation
 
-This section walks through how the TripSync codebase is organised, how the major
-components interact on AWS, and why the key algorithms are implemented the way
-they are. It is intentionally aligned with Section 4 (*Architecture &
-Implementation*) of the CS5224 Group 19 final report, so that the code and the
-report tell the same story.
-
-### Assumptions
-
-The design and the following explanation are grounded in a set of explicit
-assumptions. They are listed up front so that the reader can judge the trade-offs
-in context.
-
-- **Workload shape.** Group trip planning is *intermittent and low-frequency*
-  collaboration (seconds–minutes between saves), not real-time co-editing like
-  Google Docs. A save-on-click model with optimistic locking is therefore
-  sufficient; we deliberately avoid WebSockets / OT / CRDT.
-- **Conflicts carry product meaning.** When two collaborators edit the same
-  field, the conflict is usually a *preference disagreement* (e.g. two
-  restaurants), not a technical race. The system preserves the loser's value as
-  a *starred alternative* instead of discarding it.
-- **Scale target.** The deployment is sized for ~1,000 MAU on a single
-  `ap-southeast-1` region. Multi-region active-active is out of scope; AWS
-  managed services (CloudFront, RDS Multi-AZ) provide infrastructure-level
-  redundancy.
-- **Trust boundary.** All clients are untrusted browsers. The only trusted
-  server-side components are the FastAPI container on EC2 and the RDS instance
-  in a private subnet. DeepSeek and Google Maps are treated as external
-  third-party services.
-- **Auth model.** Short-lived JWTs (60 min access / 7 day refresh) are
-  acceptable; we do not need server-side session invalidation beyond token
-  expiry. Axios refreshes transparently on HTTP 401.
-- **Consistency model.** A single RDS primary is the source of truth. CloudFront
-  caches only the React SPA bundle (`/`), never API responses (`/v1/*`), so
-  itinerary reads are always strongly consistent from the DB.
-- **Evaluation.** Performance numbers in §5 of the report were measured on
-  `t2.micro` / `t3.micro` instances in `ap-southeast-1`; absolute latencies will
-  shift on other instance classes, but the *ratio* between local and cloud
-  deployments (tail latency, headroom) should hold.
-
 ### 1. System Architecture
 
 All client traffic enters through a single CloudFront distribution with two
@@ -208,11 +169,6 @@ the application server's security group. External calls to the DeepSeek API
 leave from the backend, whereas the Google Maps JavaScript SDK is loaded
 client-side directly from the browser.
 
-![Overall system architecture](docs/images/system-architecture.png)
-
-*Figure 1 — Overall cloud architecture (CloudFront → S3 + EC2/FastAPI → RDS).*
-
-For quick reference, the same topology in text form:
 
 ```
             ┌──────────────────────────────┐
@@ -243,10 +199,6 @@ days, place map pins, and chat with the AI assistant. A single **Save** click
 triggers the conflict-resolution algorithm in §3.1; version history and
 one-click rollback are available at any time.
 
-![User journey map](docs/images/user-journey.png)
-
-*Figure 2 — End-to-end user journey, from entry paths through the collaborative
-editor to save, conflict resolution, rollback and PDF export.*
 
 ### 3. Core Algorithms & Design
 
