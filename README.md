@@ -15,7 +15,7 @@ https://d122amyq22pv4d.cloudfront.net
 | Database | PostgreSQL (asyncpg + SQLAlchemy) |
 | AI Chat | DeepSeek API (OpenAI-compatible) |
 | PDF Export | WeasyPrint + Jinja2 |
-| Infrastructure | AWS (EC2, RDS, S3, CloudFront, ECR) |
+| Infrastructure | AWS (CloudFront, S3, ALB, ASG, EC2, RDS, ECR) |
 | CI/CD | GitHub Actions |
 
 ## Features
@@ -35,13 +35,14 @@ https://d122amyq22pv4d.cloudfront.net
 ```
 CloudFront (HTTPS)
   ├── /        ──>  S3 (React SPA)
-  └── /v1/*    ──>  EC2 (FastAPI Docker container)
-                      └── RDS PostgreSQL
+  └── /v1/*    ──>  ALB (cross-AZ)
+                      └── Auto Scaling Group (EC2 t2.micro × N, Docker)
+                             └── RDS PostgreSQL (private subnet)
 ```
 
 - **Frontend**: Built with Vite, hosted on S3, served via CloudFront CDN
-- **Backend**: Docker container (linux/amd64) on EC2, images stored in ECR
-- **Database**: RDS PostgreSQL (db.t3.micro, ap-southeast-1)
+- **Backend**: Docker containers on an Auto Scaling Group of EC2 t2.micro instances, fronted by an Application Load Balancer across two Availability Zones; container images stored in Amazon ECR
+- **Database**: RDS PostgreSQL (db.t3.micro, ap-southeast-1) in a private subnet
 - **CI/CD**: Every push to `main` triggers GitHub Actions to automatically build and deploy both frontend and backend
 
 
@@ -49,7 +50,7 @@ CloudFront (HTTPS)
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.12+
 - Node.js 18+
 - PostgreSQL 14+
 
@@ -162,10 +163,11 @@ TripSync-Cloud/
 ### 1. System Architecture
 
 All client traffic enters through a single CloudFront distribution with two
-origins: an S3 bucket hosting the compiled React SPA (path `/`) and an EC2
-instance running the FastAPI backend in a Docker container (path `/v1/*`). The
-RDS PostgreSQL instance is placed in a private subnet and is reachable only from
-the application server's security group. External calls to the DeepSeek API
+origins: an S3 bucket hosting the compiled React SPA (path `/`) and an
+Application Load Balancer fronting an Auto Scaling Group of EC2 instances
+running the FastAPI backend in Docker containers (path `/v1/*`). The RDS
+PostgreSQL instance is placed in a private subnet and is reachable only from
+the application tier's security group. External calls to the DeepSeek API
 leave from the backend, whereas the Google Maps JavaScript SDK is loaded
 client-side directly from the browser.
 
@@ -177,15 +179,23 @@ client-side directly from the browser.
                    /       │       /v1/*
                    ▼                 ▼
               ┌────────┐      ┌──────────────┐
-              │  S3    │      │ EC2 (Docker) │──▶ DeepSeek API
-              │ (SPA)  │      │   FastAPI    │
+              │  S3    │      │     ALB      │──▶ DeepSeek API
+              │ (SPA)  │      │  (cross-AZ)  │
               └────────┘      └──────┬───────┘
-                                     │ (private subnet)
-                                     ▼
-                               ┌──────────┐
-                               │   RDS    │
-                               │ Postgres │
-                               └──────────┘
+                                     │
+                              ┌──────┴──────┐
+                              ▼             ▼
+                     ┌──────────────┐ ┌──────────────┐
+                     │ EC2 (Docker) │ │ EC2 (Docker) │
+                     │   FastAPI    │ │   FastAPI    │
+                     └──────┬───────┘ └──────┬───────┘
+                            └───────┬────────┘
+                                    │ (private subnet)
+                                    ▼
+                              ┌──────────┐
+                              │   RDS    │
+                              │ Postgres │
+                              └──────────┘
 ```
 
 ### 2. User Journey
@@ -279,8 +289,8 @@ stores**, each with a single concern:
 
 1. `authStore` — user / JWT / refresh
 2. `itineraryStore` — canonical server state
-3. `editsStore` — unsaved changes + undo stack
-4. `conflictsStore` — active starred alternatives
+3. `dirtyStore` — unsaved changes + undo stack
+4. `alternativeStore` — active starred alternatives
 5. `uiStore` — modals, toasts, drag state
 
 An Axios interceptor proactively refreshes the JWT on HTTP 401, so users never
@@ -300,11 +310,11 @@ see mid-session re-authentication prompts.
 ### 6. Security
 
 - **Transport.** CloudFront enforces HTTPS and redirects all HTTP requests, so
-  no TLS certificate needs to be managed on EC2.
+  no TLS certificate needs to be managed on the application tier.
 - **Authentication.** HS256-signed JWTs issued by `python-jose`; 60 min access
   / 7 day refresh; transparent refresh on 401 via Axios interceptor.
 - **Database isolation.** The RDS security group accepts TCP 5432 *only* from
-  the application server's security group. The DB is never reachable from the
+  the application tier's security group. The DB is never reachable from the
   public internet.
 - **Content safety.** AI responses pass through DOMPurify before DOM injection
   to prevent XSS through model-generated content.
@@ -314,11 +324,23 @@ see mid-session re-authentication prompts.
 Every push to `main` runs a GitHub Actions pipeline that fully automates
 deployment, with *zero* manual SSH steps in the happy path:
 
-1. **Backend job** — Build the Docker image (`linux/amd64`), push to Amazon
-   ECR, then SSH into EC2 to stop the running container, pull the new image,
-   start a fresh container with secrets injected from GitHub Secrets, and
-   run `alembic upgrade head`.
-2. **Frontend job** — `npm run build`, sync the `dist/` output to S3, and
+1. **Backend job** — Build the Docker image (`linux/amd64`), tag it with both
+   the commit SHA and `:latest`, and push to Amazon ECR. Propagate the new
+   image across the Auto Scaling Group via an instance refresh
+   (`aws autoscaling start-instance-refresh`), which replaces ASG members one
+   at a time with zero downtime: each newly-launched instance pulls `:latest`
+   via its user-data script, starts the container with secrets injected from
+   GitHub Secrets, and joins the ALB target group once its health check
+   returns 200. Alembic migrations run as a one-off `docker exec` task against
+   RDS prior to the refresh, ensuring schema compatibility throughout the
+   rolling deployment.
+2. **Frontend job** — `npm run build`, sync the `dist/` output to S3 (hashed
+   assets with a one-year `Cache-Control`, `index.html` with `no-cache`), and
    create a CloudFront invalidation so clients pick up the new SPA bundle.
-3. **Pull-request CI** — Each PR spins up a fresh PostgreSQL container, runs
-   Alembic migrations against it, and executes the full `pytest` suite.
+
+A comprehensive backend test suite lives under `backend/tests/` (12 modules
+covering auth, security, itineraries, collaboration, sharing, versions,
+folders, map pins, and export), executed locally against a real PostgreSQL
+instance during development. End-to-end correctness is validated via a
+Playwright scenario suite (see the project report for the full 12/12 result
+breakdown).
